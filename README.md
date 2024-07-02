@@ -23,6 +23,13 @@ Extensive experiments validate our model's effectiveness on test images across 1
 ![Edge-SAN Visualization](https://github.com/deep-geo/NucleiSAM/assets/112611011/7a4452c0-db0c-4249-8ce4-23e7e2c78a7e)
 
 
+## Datasets
+
+### Supervised Datasets 
+
+https://huggingface.co/datasets/DeepNuc/EdgeNuclei
+
+
 ## Citation
 
 If you find this work useful for your research, please consider citing:
