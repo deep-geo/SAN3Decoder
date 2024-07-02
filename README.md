@@ -1,17 +1,10 @@
 # Edge-SAN (Edge-Segment Any Nuclei)
 
 ## Introduction
- In medical image analysis, accurate nuclei
-instance segmentation is important yet challenging due
-to variations in tissue types, staining techniques, imaging
-conditions, and the densely packed nature of adjacent
-nuclei. While the Segment Anything Model (SAM) excels
-in natural image settings and holds promise for medical
-imaging, it faces challenges with nuclei images due to
-substantial differences in object nature, shape, and imag-
-ing modality. Existing medical adaptations of SAM pri-
-marily focus on organs rather than nuclei, which exhibit
-greater heterogeneity and often tightly packed together.
+In medical image analysis, accurate nuclei instance segmentation is crucial yet challenging due to variations in tissue types, staining techniques, imaging conditions, and the densely packed nature of adjacent nuclei. While the Segment Anything Model (SAM) excels in natural image settings and holds promise for medical imaging, it encounters challenges with nuclei images due to significant differences in object nature, shape, and imaging modality.
+
+Existing medical adaptations of SAM primarily focus on organs rather than nuclei, which exhibit greater heterogeneity and are often tightly packed. To address this, we proposed Edge SAN, which includes a novel Edge Prompt specifically designed for packed nuclei instance segmentation. Additionally, we have curated a supervised dataset with over 1 million nuclei images, as well as another dataset comprising more than 500,000 cell and nuclei images. These images were annotated using our model through semi-supervised learning with pseudo-labeling.
+
 
 ## Our Contributions
 
