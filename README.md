@@ -1,33 +1,17 @@
 # Edge-SAN (Edge-Segment Any Nuclei)
 
 ## Introduction
-Accurate nuclei segmentation is crucial for
-extracting quantitative information from histology images
-to support disease diagnosis and treatment decisions.
-However, precise segmentation remains challenging due to
-the presence of clustered nuclei, varied morphologies, and
-the need to capture global spatial correlations. While stateof-the-art Transformer-based models have made progress
-by employing specialized tri-decoder architectures that
-separately segment nuclei, edges, and clustered edges,
-their complexity and long inference times hinder integration into clinical workflows. To address this issue, we introduce MoE-NuSeg, an innovative Swin Transformer network
-that incorporates domain-knowledge-driven Mixture of Experts (MoEs) to simplify the tri-decoder into a single unified
-decoder. Concretely, MoE-NuSeg employs three specialized experts, each dedicated to a specific segmentation
-task: nuclei identification, normal edge delineation, and
-cluster edge detection. By sharing attention heads across
-experts, this design efficiently mirrors the functionality of
-tri-decoders while surpassing their performance and reducing the number of parameters. Furthermore, we propose a
-novel two-stage training strategy to enhance performance.
-In the first stage, each expert is independently trained
-to specialize in their dedicated task without the gating
-network. The second stage then fine-tunes the interaction
-between the experts with a learnable gating network that
-adaptively allocates their task-specific contributions based
-on the input features. Evaluations across three datasets
-spanning two modalities demonstrate that MoE-NuSeg outperforms current state-of-the-art methods, achieving an
-average increase of 0.99% in Dice coefficient and 1.14%
-in IoU, while reducing model parameters and FLOPs by
-30.1% and 40.2%, respectively. The code is available at
-https://github.com/deep-geo/MoE-NuSeg
+ In medical image analysis, accurate nuclei
+instance segmentation is important yet challenging due
+to variations in tissue types, staining techniques, imaging
+conditions, and the densely packed nature of adjacent
+nuclei. While the Segment Anything Model (SAM) excels
+in natural image settings and holds promise for medical
+imaging, it faces challenges with nuclei images due to
+substantial differences in object nature, shape, and imag-
+ing modality. Existing medical adaptations of SAM pri-
+marily focus on organs rather than nuclei, which exhibit
+greater heterogeneity and often tightly packed together.
 
 ## Our Contributions
 
