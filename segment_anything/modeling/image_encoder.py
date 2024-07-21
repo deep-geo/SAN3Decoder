@@ -105,15 +105,11 @@ class ImageEncoderViT(nn.Module):
             embed_dim=embed_dim,
         )
 
-<<<<<<< HEAD
         #self.pos_embed: Optional[nn.Parameter] = None
         # Initialize with default shape and save embed_dim as channels
         self.pos_embed = nn.Parameter(torch.zeros(1, img_size // patch_size, img_size // patch_size, embed_dim))
         self.channels = embed_dim  # Use embed_dim as the number of channels
         
-=======
-        self.pos_embed: Optional[nn.Parameter] = None
->>>>>>> origin/main
         if use_abs_pos:
             # Initialize absolute positional embedding with pretrain image size.
             self.pos_embed = nn.Parameter(
@@ -158,7 +154,6 @@ class ImageEncoderViT(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.patch_embed(x)
-<<<<<<< HEAD
         # print(f"x shape: {x.shape}")
         # print(f"pos_embed shape: {self.pos_embed.shape}")
         if self.pos_embed is not None:
@@ -167,9 +162,6 @@ class ImageEncoderViT(nn.Module):
             # Resize pos_embed to match x's height and width
                 self.pos_embed = nn.Parameter(torch.zeros(1, x.size(1), x.size(2), self.channels).to(x.device))
                 print(f"reshaped pos_embed shape: {self.pos_embed.shape}")
-=======
-        if self.pos_embed is not None:
->>>>>>> origin/main
             x = x + self.pos_embed
 
         for blk in self.blocks:

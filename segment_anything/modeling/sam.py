@@ -143,7 +143,8 @@ class Sam(nn.Module):
                 dense_prompt_embeddings=dense_embeddings,
                 multimask_output=multimask_output,
             )
-           low_res_cluster_edge_masks, cluster_edge_iou_predictions = self.cluster_edge_decoder(
+            
+            low_res_cluster_edge_masks, cluster_edge_iou_predictions = self.cluster_edge_decoder(
                 image_embeddings=curr_embedding.unsqueeze(0),
                 image_pe=self.prompt_encoder.get_dense_pe(),
                 sparse_prompt_embeddings=sparse_embeddings,
