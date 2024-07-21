@@ -11,21 +11,26 @@ from segment_anything import sam_model_registry
 from torch import optim
 from torch.utils.data import DataLoader
 
+
 from DataLoader import TrainingDataset, TestingDataset, TrainingDatasetFolder, \
     TestingDatasetFolder, stack_dict_batched, CombineBatchSampler #, create_pseudo_datafolder
+
 from utils import get_logger, generate_point, setting_prompt_none, save_masks, \
     postprocess_masks, to_device, prompt_and_decoder
 from loss import FocalDiceloss_IoULoss
 from arguments import parse_train_args
 from metrics import SegMetrics, AggregatedMetrics
 from tqdm import tqdm
+
 import torch.multiprocessing as mp
+
 
 torch.set_default_dtype(torch.float32)
 max_num_chkpt = 3
 global_step = 0
 global_metrics_dict = {}
 global_train_losses = []
+
 
 
 @torch.no_grad()
@@ -121,11 +126,14 @@ def eval_model(args, model, test_loader, output_dataset_metrics: bool = False):
 def train_one_epoch(args, model, optimizer, train_loader, epoch, criterion,
                     test_loader, run_dir):
 
+
     global global_metrics_dict
     global global_step
     global global_train_losses
 
+
     pbar = tqdm(total=len(train_loader), desc="Training", mininterval=0.5)
+
     dataloader_iter = iter(train_loader)
 
     while True:
@@ -169,7 +177,9 @@ def train_one_epoch(args, model, optimizer, train_loader, epoch, criterion,
         masks, low_res_masks, iou_predictions = prompt_and_decoder(
             args, batched_input, model, image_embeddings, decoder_iter=False)
 
+
         loss = criterion(masks, labels, iou_predictions)
+
         loss.backward(retain_graph=False)
 
         optimizer.step()
@@ -195,7 +205,9 @@ def train_one_epoch(args, model, optimizer, train_loader, epoch, criterion,
             masks, low_res_masks, iou_predictions = prompt_and_decoder(
                 args, batched_input, model, image_embeddings, decoder_iter=True)
 
+
             loss = criterion(masks, labels, iou_predictions) #pseudo_weights
+
             loss.backward(retain_graph=True)
 
             optimizer.step()
@@ -212,12 +224,14 @@ def train_one_epoch(args, model, optimizer, train_loader, epoch, criterion,
                 f"epoch:{epoch + 1}, iteration:{batch + 1}, loss:{loss.item()}")
             save_path = os.path.join(f"{args.work_dir}/models", args.run_name,
                                      f"epoch{epoch + 1}_batch{batch + 1}.pth")
+
             state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict()}
             torch.save(state, save_path)
 
         global_train_losses.append(loss.item())
 
         pbar.update()
+
         pbar.set_postfix(train_loss=loss.item(), epoch=epoch)
 
         if global_step % args.eval_interval == 0:
@@ -243,13 +257,16 @@ def train_one_epoch(args, model, optimizer, train_loader, epoch, criterion,
             # save checkpoints
             chkpts = [
                 (p, float(re.search(r"test-loss(\d+\.\d+|nan)", os.path.basename(p)).group(1)))
+
                 for p in glob.glob(os.path.join(run_dir, "*.pth"))
             ]
             chkpts = sorted(chkpts, key=lambda x: x[-1])
             if not chkpts or average_test_loss < chkpts[-1][-1]:
                 save_path = os.path.join(
                     run_dir,
+
                     f"epoch{epoch + 1:04d}_step{global_step}_loss{average_test_loss:.4f}.pth"
+
                 )
                 state = {
                     'model': model.float().state_dict(),
@@ -273,6 +290,7 @@ def main(args):
 
     global global_metrics_dict
     global global_step
+
 
     model = sam_model_registry[args.model_type](args).to(args.device)
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
@@ -320,7 +338,9 @@ def main(args):
               "multimask", "encoder_adapter"]
     config = {p: getattr(args, p) for p in params}
     config["resume_checkpoint"] = resume_chkpt
+
     wandb.init(project="SAM_3decoder", name=args.run_name, config=config)
+
 
     # Random seed Setting
     if args.seed is not None:
@@ -374,6 +394,7 @@ def main(args):
     print("\ngt dataset length: ", len(train_set_gt))
 
     train_loader = DataLoader(train_set_gt,  batch_size=args.batch_size,
+
                                   num_workers=args.num_workers)
 
     test_loader = DataLoader(dataset=test_set, batch_size=args.batch_size,
@@ -397,8 +418,10 @@ def main(args):
                 global_metrics_dict[f"{dataset_name}/{metric}"] = \
                     test_metrics_datasets[dataset_name].get(metric, None)
 
+
     global_metrics_dict["Loss/train"] = 1.0
     global_metrics_dict["Loss/test"] = 1.0
+
 
 
     wandb.log(global_metrics_dict, step=global_step, commit=True)
@@ -410,11 +433,14 @@ def main(args):
 
         train_one_epoch(
             args, model, optimizer, train_loader, epoch, criterion,
+
             test_loader, run_dir
+
         )
 
         if args.lr_scheduler is not None:
             scheduler.step()
+
 
 
 if __name__ == '__main__':

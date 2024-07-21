@@ -163,6 +163,7 @@ class TrainingDataset(Dataset):
     def __init__(self, split_paths, requires_name: bool = True,
                  point_num: int = 1, mask_num: int = 5,
                  edge_point_num: int = 3):
+
         """
         Initializes a training dataset.
         Args:
@@ -194,13 +195,13 @@ class TrainingDataset(Dataset):
                 label_path = os.path.join(data_root, label_path)
                 self.image_paths.append(data_path)
                 self.label_paths.append(label_path)
-        
+
 
     def __add__(self, other):
         instance = copy.deepcopy(self)
         instance.image_paths += other.image_paths
         instance.label_paths += other.label_paths
-       
+
         return instance
     
     def __getitem__(self, index):
@@ -287,6 +288,7 @@ class TrainingDataset(Dataset):
             if edges is not None:
                 image_input["edges"] = edges
             image_input["image_path"] = image_path
+
             image_input["dataset_name"] = os.path.basename(
                 os.path.dirname(
                     os.path.dirname(image_path)

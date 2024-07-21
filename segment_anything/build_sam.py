@@ -50,7 +50,6 @@ def build_sam_vit_b(args):
     )
 
 
-
 def create_three_decoder_sam(args):
     image_encoder = ImageEncoderViT(
         img_size=256,
@@ -104,13 +103,12 @@ def create_three_decoder_sam(args):
 
 
 
+
 sam_model_registry = {
     "default": build_sam_vit_h,
     "vit_h": build_sam_vit_h,
     "vit_l": build_sam_vit_l,
     "vit_b": build_sam_vit_b,
-    "vit_b": build_sam_vit_b,
-    #"three_decoder": create_three_decoder_sam
 }
 
 
@@ -149,7 +147,20 @@ def _build_sam(
             input_image_size=(image_size, image_size),
             mask_in_chans=16,
         ),
-        mask_decoder=MaskDecoder(
+        # mask_decoder=MaskDecoder(
+        #     num_multimask_outputs=3,
+        #     transformer=TwoWayTransformer(
+        #         depth=2,
+        #         embedding_dim=prompt_embed_dim,
+        #         mlp_dim=2048,
+        #         num_heads=8,
+        #     ),
+        #     transformer_dim=prompt_embed_dim,
+        #     iou_head_depth=3,
+        #     iou_head_hidden_dim=256,
+        # ),
+
+        segmentation_decoder=MaskDecoder(
             num_multimask_outputs=3,
             transformer=TwoWayTransformer(
                 depth=2,
@@ -161,45 +172,33 @@ def _build_sam(
             iou_head_depth=3,
             iou_head_hidden_dim=256,
         ),
-        # segmentation_decoder=MaskDecoder(
-        #     num_multimask_outputs=3,
-        #     transformer=TwoWayTransformer(
-        #         depth=2,
-        #         embedding_dim=prompt_embed_dim,
-        #         mlp_dim=2048,
-        #         num_heads=8,
-        #     ),
-        #     transformer_dim=prompt_embed_dim,
-        #     iou_head_depth=3,
-        #     iou_head_hidden_dim=256,
-        # ),
-        # normal_edge_decoder=MaskDecoder(
-        #     num_multimask_outputs=3,
-        #     transformer=TwoWayTransformer(
-        #         depth=2,
-        #         embedding_dim=prompt_embed_dim,
-        #         mlp_dim=2048,
-        #         num_heads=8,
-        #     ),
-        #     transformer_dim=prompt_embed_dim,
-        #     iou_head_depth=3,
-        #     iou_head_hidden_dim=256,
-        # ),
-        # cluster_edge_decoder=MaskDecoder(
-        #     num_multimask_outputs=3,
-        #     transformer=TwoWayTransformer(
-        #         depth=2,
-        #         embedding_dim=prompt_embed_dim,
-        #         mlp_dim=2048,
-        #         num_heads=8,
-        #     ),
-        #     transformer_dim=prompt_embed_dim,
-        #     iou_head_depth=3,
-        #     iou_head_hidden_dim=256,
-        # ),
+        normal_edge_decoder=MaskDecoder(
+            num_multimask_outputs=3,
+            transformer=TwoWayTransformer(
+                depth=2,
+                embedding_dim=prompt_embed_dim,
+                mlp_dim=2048,
+                num_heads=8,
+            ),
+            transformer_dim=prompt_embed_dim,
+            iou_head_depth=3,
+            iou_head_hidden_dim=256,
+        ),
+        cluster_edge_decoder=MaskDecoder(
+            num_multimask_outputs=3,
+            transformer=TwoWayTransformer(
+                depth=2,
+                embedding_dim=prompt_embed_dim,
+                mlp_dim=2048,
+                num_heads=8,
+            ),
+            transformer_dim=prompt_embed_dim,
+            iou_head_depth=3,
+            iou_head_hidden_dim=256,
+        ),
 
 
-        
+
         pixel_mean=[123.675, 116.28, 103.53],
         pixel_std=[58.395, 57.12, 57.375],
     )

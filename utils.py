@@ -450,7 +450,11 @@ def prompt_and_decoder(args, batched_input, model, image_embeddings,
                 points=points,
                 boxes=batched_input.get("boxes", None),
                 masks=batched_input.get("mask_inputs", None),
+<<<<<<< HEAD
                 cluster_edges=batched_input.get("cluster_edge_coords", None)
+=======
+                cluster_edges=batched_input.get("edges", None)
+>>>>>>> origin/main
             )
 
     else:
@@ -458,6 +462,7 @@ def prompt_and_decoder(args, batched_input, model, image_embeddings,
             points=points,
             boxes=batched_input.get("boxes", None),
             masks=batched_input.get("mask_inputs", None),
+<<<<<<< HEAD
             cluster_edges=batched_input.get("cluster_edge_coords", None)
         )
 
@@ -477,6 +482,12 @@ def prompt_and_decoder(args, batched_input, model, image_embeddings,
 
     
     low_res_seg_masks, seg_iou_predictions = model.segmentation_decoder(
+=======
+            cluster_edges=batched_input.get("edges", None)
+        )
+
+    low_res_masks, iou_predictions = model.mask_decoder(
+>>>>>>> origin/main
         image_embeddings=image_embeddings,
         image_pe=model.prompt_encoder.get_dense_pe(),
         sparse_prompt_embeddings=sparse_embeddings,
@@ -484,6 +495,7 @@ def prompt_and_decoder(args, batched_input, model, image_embeddings,
         multimask_output=args.multimask,
     )
 
+<<<<<<< HEAD
     low_res_norm_edge_masks, norm_edge_iou_predictions = model.normal_edge_decoder(
         image_embeddings=image_embeddings,
         image_pe=model.prompt_encoder.get_dense_pe(),
@@ -550,6 +562,20 @@ def prompt_and_decoder(args, batched_input, model, image_embeddings,
     
     #return masks, low_res_masks, iou_predictions
     return seg_masks, low_res_seg_masks, seg_iou_predictions, norm_edge_masks, low_res_norm_edge_masks, norm_edge_iou_predictions, cluster_edge_masks, low_res_cluster_edge_masks, cluster_edge_iou_predictions
+=======
+    if args.multimask:
+        max_values, max_indexs = torch.max(iou_predictions, dim=1)
+        max_values = max_values.unsqueeze(1)
+        iou_predictions = max_values
+        low_res = []
+        for i, idx in enumerate(max_indexs):
+            low_res.append(low_res_masks[i:i + 1, idx])
+        low_res_masks = torch.stack(low_res, 0)
+
+    masks = F.interpolate(low_res_masks, (args.image_size, args.image_size),
+                          mode="bilinear", align_corners=False)
+    return masks, low_res_masks, iou_predictions
+>>>>>>> origin/main
 
 
 class MaskPredictor:

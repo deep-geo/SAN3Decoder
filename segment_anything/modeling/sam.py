@@ -23,10 +23,12 @@ class Sam(nn.Module):
         self,
         image_encoder: ImageEncoderViT,
         prompt_encoder: PromptEncoder,
+
         #mask_decoder: MaskDecoder, 
         segmentation_decoder: MaskDecoder,  # Changed: Add segmentation_decoder
         normal_edge_decoder: MaskDecoder,   # Changed: Add normal_edge_decoder
         cluster_edge_decoder: MaskDecoder,  # Changed: Add cluster_edge_decoder
+
         pixel_mean: List[float] = [123.675, 116.28, 103.53],
         pixel_std: List[float] = [58.395, 57.12, 57.375],
     ) -> None:
@@ -45,10 +47,12 @@ class Sam(nn.Module):
         super().__init__()
         self.image_encoder = image_encoder
         self.prompt_encoder = prompt_encoder
+
         #self.mask_decoder = mask_decoder
         self.segmentation_decoder = segmentation_decoder  # add by ray 0717
         self.normal_edge_decoder = normal_edge_decoder  # add by ray 0717
         self.cluster_edge_decoder = cluster_edge_decoder  # add by ray 0717
+
         self.register_buffer("pixel_mean", torch.Tensor(pixel_mean).view(-1, 1, 1), False)
         self.register_buffer("pixel_std", torch.Tensor(pixel_std).view(-1, 1, 1), False)
 
@@ -114,6 +118,7 @@ class Sam(nn.Module):
                 points=points,
                 boxes=image_record.get("boxes", None),
                 masks=image_record.get("mask_inputs", None),
+
                 cluster_edges=image_record.get("cluster_edge_coords", None)  # Add cluster_edges
             )
             # low_res_masks, iou_predictions = self.mask_decoder(
@@ -123,21 +128,22 @@ class Sam(nn.Module):
             #     dense_prompt_embeddings=dense_embeddings,
             #     multimask_output=multimask_output,
             # )
-            seg_masks, seg_iou_predictions = self.segmentation_decoder(
+            low_res_seg_masks, seg_iou_predictions = self.segmentation_decoder(
                 image_embeddings=curr_embedding.unsqueeze(0),
                 image_pe=self.prompt_encoder.get_dense_pe(),
                 sparse_prompt_embeddings=sparse_embeddings,
                 dense_prompt_embeddings=dense_embeddings,
                 multimask_output=multimask_output,
             )
-            norm_edge_masks, norm_edge_iou_predictions = self.normal_edge_decoder(
+
+            low_res_norm_edge_masks, norm_edge_iou_predictions = self.normal_edge_decoder(
                 image_embeddings=curr_embedding.unsqueeze(0),
                 image_pe=self.prompt_encoder.get_dense_pe(),
                 sparse_prompt_embeddings=sparse_embeddings,
                 dense_prompt_embeddings=dense_embeddings,
                 multimask_output=multimask_output,
             )
-            cluster_edge_masks, cluster_edge_iou_predictions = self.cluster_edge_decoder(
+           low_res_cluster_edge_masks, cluster_edge_iou_predictions = self.cluster_edge_decoder(
                 image_embeddings=curr_embedding.unsqueeze(0),
                 image_pe=self.prompt_encoder.get_dense_pe(),
                 sparse_prompt_embeddings=sparse_embeddings,
@@ -148,36 +154,35 @@ class Sam(nn.Module):
        
             seg_masks = self.postprocess_masks(
                 #low_res_masks,
-                seg_masks,
+                low_res_seg_masks,
                 input_size=image_record["image"].shape[-2:],
                 original_size=image_record["original_size"],
             )
             norm_edge_masks = self.postprocess_masks(
-                norm_edge_masks,
+                low_res_norm_edge_masks,
                 input_size=image_record["image"].shape[-2:],
                 original_size=image_record["original_size"],
             )
             cluster_edge_masks = self.postprocess_masks(
-                cluster_edge_masks,
+                low_res_cluster_edge_masks,
                 input_size=image_record["image"].shape[-2:],
                 original_size=image_record["original_size"],
             )
             
-            #masks = masks > self.
-            seg_masks = seg_masks > self.mask_threshold
-            norm_edge_masks = norm_edge_masks > self.mask_threshold
-            cluster_edge_masks = cluster_edge_masks > self.mask_threshold
+            low_res_seg_masks = low_res_seg_masks > self.mask_threshold
+            low_res_norm_edge_masks = low_res_norm_edge_masks > self.mask_threshold
+            low_res_cluster_edge_masks = low_res_cluster_edge_masks > self.mask_threshold
             
             outputs.append(
                 {
                     # "masks": masks,
                     # "iou_predictions": iou_predictions,
                     # "low_res_logits": low_res_masks,
-                    "segmentation_masks": seg_masks,
+                    "segmentation_masks": low_res_seg_masks,
                     "segmentation_iou_predictions": seg_iou_predictions,
-                    "normal_edge_masks": norm_edge_masks,
+                    "normal_edge_masks": low_res_norm_edge_masks,
                     "normal_edge_iou_predictions": norm_edge_iou_predictions,
-                    "cluster_edge_masks": cluster_edge_masks,
+                    "cluster_edge_masks": low_res_cluster_edge_masks,
                     "cluster_edge_iou_predictions": cluster_edge_iou_predictions,
                 }
             )
