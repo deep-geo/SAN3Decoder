@@ -12,7 +12,7 @@ from torch import optim
 from torch.utils.data import DataLoader
 
 from DataLoader import TrainingDataset, TestingDataset, TrainingDatasetFolder, \
-    TestingDatasetFolder, stack_dict_batched, CombineBatchSampler #, create_pseudo_datafolder
+    TestingDatasetFolder, stack_dict_batched
 from utils import get_logger, generate_point, setting_prompt_none, save_masks, \
     postprocess_masks, to_device, prompt_and_decoder
 from loss import FocalDiceloss_IoULoss
@@ -195,7 +195,7 @@ def train_one_epoch(args, model, optimizer, train_loader, epoch, criterion,
             masks, low_res_masks, iou_predictions = prompt_and_decoder(
                 args, batched_input, model, image_embeddings, decoder_iter=True)
 
-            loss = criterion(masks, labels, iou_predictions) #pseudo_weights
+            loss = criterion(masks, labels, iou_predictions)
             loss.backward(retain_graph=True)
 
             optimizer.step()
@@ -311,7 +311,7 @@ def main(args):
     if resume_chkpt:
         with open(resume_chkpt, "rb") as f:
             checkpoint = torch.load(f, map_location=args.device)
-            optimizer.load_state_dict(checkpoint['optimizer'].state_dict())
+            #optimizer.load_state_dict(checkpoint['optimizer'].state_dict())
             resume_epoch = checkpoint["epoch"]
 
     params = ["seed", "epochs", "batch_size", "image_size", "mask_num", "lr",
@@ -358,8 +358,7 @@ def main(args):
             point_num=1,
             edge_point_num=args.edge_point_num,
             mask_num=args.mask_num,
-            requires_name=False,
-            is_pseudo=False
+            requires_name=False
         )
         test_set = TestingDataset(split_paths=args.split_paths,
                                   requires_name=True,

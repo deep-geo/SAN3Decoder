@@ -450,7 +450,7 @@ def prompt_and_decoder(args, batched_input, model, image_embeddings,
                 points=points,
                 boxes=batched_input.get("boxes", None),
                 masks=batched_input.get("mask_inputs", None),
-                cluster_edges=batched_input.get("edges", None)
+                cluster_edges=batched_input.get("cluster_edge_coords", None)
             )
 
     else:
@@ -458,10 +458,25 @@ def prompt_and_decoder(args, batched_input, model, image_embeddings,
             points=points,
             boxes=batched_input.get("boxes", None),
             masks=batched_input.get("mask_inputs", None),
-            cluster_edges=batched_input.get("edges", None)
+            cluster_edges=batched_input.get("cluster_edge_coords", None)
         )
 
-    low_res_masks, iou_predictions = model.mask_decoder(
+    # low_res_masks, iou_predictions = model.mask_decoder(
+    #     image_embeddings=image_embeddings,
+    #     image_pe=model.prompt_encoder.get_dense_pe(),
+    #     sparse_prompt_embeddings=sparse_embeddings,
+    #     dense_prompt_embeddings=dense_embeddings,
+    #     multimask_output=args.multimask,)
+
+    # print(f"image_embeddings shape: {image_embeddings.shape}")
+    # print(f"sparse_embeddings shape: {sparse_embeddings.shape}")
+    # print(f"dense_embeddings shape: {dense_embeddings.shape}")
+
+    dense_embeddings_resized = F.interpolate(dense_embeddings, size=image_embeddings.shape[-2:], mode='bilinear', align_corners=False)
+    #print(f"dense_embeddings_resized shape: {dense_embeddings_resized.shape}")
+
+    
+    low_res_seg_masks, seg_iou_predictions = model.segmentation_decoder(
         image_embeddings=image_embeddings,
         image_pe=model.prompt_encoder.get_dense_pe(),
         sparse_prompt_embeddings=sparse_embeddings,
@@ -469,18 +484,72 @@ def prompt_and_decoder(args, batched_input, model, image_embeddings,
         multimask_output=args.multimask,
     )
 
-    if args.multimask:
-        max_values, max_indexs = torch.max(iou_predictions, dim=1)
-        max_values = max_values.unsqueeze(1)
-        iou_predictions = max_values
-        low_res = []
-        for i, idx in enumerate(max_indexs):
-            low_res.append(low_res_masks[i:i + 1, idx])
-        low_res_masks = torch.stack(low_res, 0)
+    low_res_norm_edge_masks, norm_edge_iou_predictions = model.normal_edge_decoder(
+        image_embeddings=image_embeddings,
+        image_pe=model.prompt_encoder.get_dense_pe(),
+        sparse_prompt_embeddings=sparse_embeddings,
+        dense_prompt_embeddings=dense_embeddings,
+        multimask_output=args.multimask,
+    )
 
-    masks = F.interpolate(low_res_masks, (args.image_size, args.image_size),
-                          mode="bilinear", align_corners=False)
-    return masks, low_res_masks, iou_predictions
+    low_res_cluster_edge_masks, cluster_edge_iou_predictions = model.cluster_edge_decoder(
+        image_embeddings=image_embeddings,
+        image_pe=model.prompt_encoder.get_dense_pe(),
+        sparse_prompt_embeddings=sparse_embeddings,
+        dense_prompt_embeddings=dense_embeddings,
+        multimask_output=args.multimask,
+    )
+
+    # if args.multimask:
+    #     max_values, max_indexs = torch.max(iou_predictions, dim=1)
+    #     max_values = max_values.unsqueeze(1)
+    #     iou_predictions = max_values
+    #     low_res = []
+    #     for i, idx in enumerate(max_indexs):
+    #         low_res.append(low_res_masks[i:i + 1, idx])
+    #     low_res_masks = torch.stack(low_res, 0)
+
+    if args.multimask:
+        max_values, max_indexs = torch.max(seg_iou_predictions, dim=1)
+        max_values = max_values.unsqueeze(1)
+        seg_iou_predictions = max_values
+        seg_low_res = []
+        for i, idx in enumerate(max_indexs):
+            seg_low_res.append(low_res_seg_masks[i:i + 1, idx])
+        seg_masks = torch.stack(seg_low_res, 0)
+
+
+    #masks = F.interpolate(low_res_masks, (args.image_size, args.image_size), mode="bilinear", align_corners=False)
+    seg_masks = F.interpolate(low_res_seg_masks, (args.image_size, args.image_size), mode="bilinear", align_corners=False)
+    norm_edge_masks = F.interpolate(low_res_norm_edge_masks, (args.image_size, args.image_size), mode="bilinear", align_corners=False)
+    cluster_edge_masks = F.interpolate(low_res_cluster_edge_masks, (args.image_size, args.image_size), mode="bilinear", align_corners=False)
+
+    # Convert cluster_edge_masks to tensor if it's a tuple before interpolating
+    #cluster_edge_masks = F.interpolate(torch.stack(cluster_edge_masks) if isinstance(cluster_edge_masks, tuple) else cluster_edge_masks, (args.image_size, args.image_size), mode="bilinear", align_corners=False)
+
+    # Check the shapes of cluster_edge_masks
+    if isinstance(cluster_edge_masks, tuple):
+        print("Shapes of tensors in cluster_edge_masks:")
+        valid_masks = []
+        for i, mask in enumerate(cluster_edge_masks):
+            print(f"cluster_edge_masks[{i}] shape: {mask.shape}")
+            if len(mask.shape) == 4:
+                valid_masks.append(mask)
+        
+        if valid_masks:
+            # Find the maximum shape
+            max_shape = max([mask.shape for mask in valid_masks], key=lambda x: (x[2], x[3]))
+            print(f"Max shape in cluster_edge_masks: {max_shape}")
+
+            # Resize all valid masks to the maximum shape
+            resized_cluster_edge_masks = [F.interpolate(mask, size=max_shape[2:], mode='bilinear', align_corners=False) for mask in valid_masks]
+            cluster_edge_masks = torch.stack(resized_cluster_edge_masks)
+        else:
+            raise ValueError("No valid masks found in cluster_edge_masks.")
+
+    
+    #return masks, low_res_masks, iou_predictions
+    return seg_masks, low_res_seg_masks, seg_iou_predictions, norm_edge_masks, low_res_norm_edge_masks, norm_edge_iou_predictions, cluster_edge_masks, low_res_cluster_edge_masks, cluster_edge_iou_predictions
 
 
 class MaskPredictor:

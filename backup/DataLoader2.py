@@ -162,7 +162,7 @@ class TrainingDataset(Dataset):
 
     def __init__(self, split_paths, requires_name: bool = True,
                  point_num: int = 1, mask_num: int = 5,
-                 edge_point_num: int = 3):
+                 edge_point_num: int = 3, is_pseudo: bool = False):
         """
         Initializes a training dataset.
         Args:
@@ -180,6 +180,7 @@ class TrainingDataset(Dataset):
 
         self.image_paths = []
         self.label_paths = []
+        self.pseudos = []
 
         split_paths = [split_paths] if isinstance(split_paths, str) else split_paths
 
@@ -194,13 +195,13 @@ class TrainingDataset(Dataset):
                 label_path = os.path.join(data_root, label_path)
                 self.image_paths.append(data_path)
                 self.label_paths.append(label_path)
-        
+                self.pseudos.append(is_pseudo)
 
     def __add__(self, other):
         instance = copy.deepcopy(self)
         instance.image_paths += other.image_paths
         instance.label_paths += other.label_paths
-       
+        instance.pseudos += other.pseudos
         return instance
     
     def __getitem__(self, index):
@@ -287,6 +288,7 @@ class TrainingDataset(Dataset):
             if edges is not None:
                 image_input["edges"] = edges
             image_input["image_path"] = image_path
+            image_input["pseudo"] = self.pseudos[index]
             image_input["dataset_name"] = os.path.basename(
                 os.path.dirname(
                     os.path.dirname(image_path)
@@ -312,6 +314,8 @@ def stack_dict_batched(batched_input):
         else:
             out_dict[k] = v.reshape(-1, *v.shape[2:])
     return out_dict
+
+
 
 
 class DatasetFolderMixin:
@@ -390,9 +394,150 @@ class TrainingDatasetFolder(TrainingDataset, DatasetFolderMixin):
         super().__init__(
             split_paths=self.get_split_paths(), requires_name=requires_name,
             point_num=point_num, mask_num=mask_num,
-            edge_point_num=edge_point_num
+            edge_point_num=edge_point_num, is_pseudo=False
         )
 
 
+# def find_overlapping_edges(label):
+#     """
+#     Find overlapping edges between clustered nuclei.
+
+#     Args:
+#         label (array): The binary label image.
+
+#     Returns:
+#         array: An array of points representing the overlapping edges.
+#     """
+#     # Find contours of the nuclei
+#     contours, _ = cv2.findContours(label, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+#     # Create an empty mask to draw contours
+#     contour_mask = np.zeros_like(label)
+
+#     # Draw all contours on the mask
+#     #cv2.drawContours(contour_mask, contours, -1, 255, thickness=cv2.FILLED)
+
+#     # Use morphological operations to find overlaps
+#     overlap_mask = cv2.erode(contour_mask, kernel=np.ones((3, 3), np.uint8), iterations=1)
+#     overlap_mask = cv2.dilate(overlap_mask, kernel=np.ones((3, 3), np.uint8), iterations=1)
+
+#     # Find contours of the overlapping regions
+#     overlap_contours, _ = cv2.findContours(overlap_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+#     # Extract points from the overlapping contours
+#     overlap_edges = []
+#     for contour in overlap_contours:
+#         if cv2.contourArea(contour) > 10:  # Filter small contours
+#             start_point = contour[0][0]
+#             end_point = contour[-1][0]
+#             middle_point = contour[len(contour) // 2][0]
+#             overlap_edges.append([start_point, middle_point, end_point])
+
+#     return np.array(overlap_edges, dtype=np.float32)
 
 
+# class CombineBatchSampler(Sampler):
+
+#     def __init__(self, gt_dataset_len: int, pseudo_dataset_len: int,
+#                  batch_size: int, sample_rate: float, drop_last: bool = False):
+#         self.gt_dataset_len = gt_dataset_len
+#         self.pseudo_dataset_len = pseudo_dataset_len
+#         self.indices_pseudo = self._create_pseudo_indices()
+#         self.indices_pseudo_ready = []
+#         self.pseudo_iter = None
+#         self.set_pseudo_indices_to_use(self.indices_pseudo_ready)
+#         self.batch_size = batch_size
+#         assert 0.0 <= sample_rate <= 1.0
+#         self.sample_rate = sample_rate
+#         self.drop_last = drop_last
+
+#     def _create_pseudo_indices(self):
+#         indices_pseudo = list(range(self.gt_dataset_len,
+#                                     self.gt_dataset_len + self.pseudo_dataset_len))
+#         random.shuffle(indices_pseudo)
+#         return indices_pseudo
+
+#     def set_pseudo_indices_to_use(self, indices: List[int]):
+#         self.indices_pseudo_ready = indices
+#         self.pseudo_iter = iter(self.indices_pseudo_ready)
+
+#     def __iter__(self):
+#         indices_gt = list(range(self.gt_dataset_len))
+#         random.shuffle(indices_gt)
+#         iter_gt = iter(indices_gt)
+
+#         batch = []
+#         finished_gt = False
+#         while True:
+#             if finished_gt or random.random() < self.sample_rate:
+#                 try:
+#                     idx = next(self.pseudo_iter)
+#                 except StopIteration:
+#                     if finished_gt:
+#                         break
+#                     else:
+#                         random.shuffle(self.indices_pseudo_ready)
+#                         self.set_pseudo_indices_to_use(self.indices_pseudo_ready)
+#                         continue
+#             else:
+#                 try:
+#                     idx = next(iter_gt)
+#                 except StopIteration:
+#                     finished_gt = True
+#                     continue
+
+#             batch.append(idx)
+#             if len(batch) == self.batch_size:
+#                 # print("batch = ", batch)
+#                 yield batch
+#                 batch = []
+
+#         if len(batch) > 0 and not self.drop_last:
+#             # print("batch = ", batch)
+#             yield batch
+
+#     def set_sample_rate(self, sample_rate: float):
+#         self.sample_rate = sample_rate
+
+#     def __len__(self):
+#         if self.drop_last:
+#             return (self.gt_dataset_len + self.pseudo_dataset_len) // self.batch_size
+#         else:
+#             return math.ceil((self.gt_dataset_len + self.pseudo_dataset_len) / self.batch_size)
+
+
+#  def create_pseudo_datafolder(data_root: str, pseudo_root: str, dst_size: int):
+#     pseudo_data_dir = os.path.join(pseudo_root, "data")
+#     pseudo_label_dir = os.path.join(pseudo_root, "label")
+#     os.makedirs(pseudo_data_dir, exist_ok=True)
+#     os.makedirs(pseudo_label_dir, exist_ok=True)
+
+#     img_paths = glob.glob(os.path.join(data_root, "*.png"))
+#     data_paths = []
+#     label_paths = []
+#     for path in tqdm.tqdm(img_paths, desc="preparing unsupervised data"):
+#         img = cv2.imread(path)
+#         if img.shape[0] == dst_size and img.shape[1] == dst_size:
+#             dst_img = img
+#         else:
+#             transform = get_transform(dst_size, img.shape[0], img.shape[1])
+#             dst_img = transform(image=img)["image"]
+#         basename = os.path.basename(path)
+#         dst_path = os.path.join(pseudo_data_dir, basename)
+#         cv2.imwrite(dst_path, dst_img)
+
+#         data_paths.append(os.path.join("data", basename))
+#         label_paths.append(os.path.join("label", basename[:-4] + ".npy"))
+
+#     split_json = {
+#         "seed": None,
+#         "test_size": 0,
+#         "quantity": {"train": len(data_paths), "test": 0, "total": len(data_paths)},
+#         "train": [(dp, lp) for dp, lp in zip(data_paths, label_paths)],
+#         "test": []
+#     }
+#     split_path = os.path.join(pseudo_root, "split.json")
+#     with open(split_path, "w") as f:
+#         json.dump(split_json, f, indent=2)
+
+#     return split_path, split_json

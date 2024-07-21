@@ -194,13 +194,11 @@ class TrainingDataset(Dataset):
                 label_path = os.path.join(data_root, label_path)
                 self.image_paths.append(data_path)
                 self.label_paths.append(label_path)
-        
 
     def __add__(self, other):
         instance = copy.deepcopy(self)
         instance.image_paths += other.image_paths
         instance.label_paths += other.label_paths
-       
         return instance
     
     def __getitem__(self, index):
@@ -392,7 +390,5 @@ class TrainingDatasetFolder(TrainingDataset, DatasetFolderMixin):
             point_num=point_num, mask_num=mask_num,
             edge_point_num=edge_point_num
         )
-
-
 
 

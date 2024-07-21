@@ -10,22 +10,25 @@ import wandb
 from segment_anything import sam_model_registry
 from torch import optim
 from torch.utils.data import DataLoader
-
 from DataLoader import TrainingDataset, TestingDataset, TrainingDatasetFolder, \
-    TestingDatasetFolder, stack_dict_batched, CombineBatchSampler #, create_pseudo_datafolder
+    TestingDatasetFolder, stack_dict_batched, CombineBatchSampler, create_pseudo_datafolder
 from utils import get_logger, generate_point, setting_prompt_none, save_masks, \
     postprocess_masks, to_device, prompt_and_decoder
 from loss import FocalDiceloss_IoULoss
 from arguments import parse_train_args
 from metrics import SegMetrics, AggregatedMetrics
 from tqdm import tqdm
+from pseudo import PseudoSchedular, generate_pseudo_multiple, \
+    generate_pseudo_batches, PseudoIndicesIter
 import torch.multiprocessing as mp
+
 
 torch.set_default_dtype(torch.float32)
 max_num_chkpt = 3
 global_step = 0
 global_metrics_dict = {}
 global_train_losses = []
+global_pseudo_counts = []
 
 
 @torch.no_grad()
@@ -119,13 +122,16 @@ def eval_model(args, model, test_loader, output_dataset_metrics: bool = False):
 
 
 def train_one_epoch(args, model, optimizer, train_loader, epoch, criterion,
-                    test_loader, run_dir):
+                    pseudo_schedular, test_loader, pseudo_iter: PseudoIndicesIter,
+                    gt_total, pseudo_total, pseudo_root, run_dir):
 
     global global_metrics_dict
     global global_step
     global global_train_losses
+    global global_pseudo_counts
 
     pbar = tqdm(total=len(train_loader), desc="Training", mininterval=0.5)
+    pseudo_weights = None
     dataloader_iter = iter(train_loader)
 
     while True:
@@ -169,7 +175,18 @@ def train_one_epoch(args, model, optimizer, train_loader, epoch, criterion,
         masks, low_res_masks, iou_predictions = prompt_and_decoder(
             args, batched_input, model, image_embeddings, decoder_iter=False)
 
-        loss = criterion(masks, labels, iou_predictions)
+        if args.activate_unsupervised and args.unsupervised_weight_gr:
+            pseudos = (batched_input["pseudo"].unsqueeze(1).
+                       repeat(1, args.mask_num).reshape(-1))
+            pseudo_weights = torch.ones(size=pseudos.shape, device=args.device)
+            pseudo_weights[pseudos] = pseudo_schedular.pseudo_weight
+
+        if args.activate_unsupervised:
+            pseudo_list = batched_input["pseudo"].cpu().to(torch.int).tolist()
+            # print(f"pseudo_list: {pseudo_list}")
+            global_pseudo_counts += pseudo_list
+
+        loss = criterion(masks, labels, iou_predictions, pseudo_weights)
         loss.backward(retain_graph=False)
 
         optimizer.step()
@@ -195,7 +212,7 @@ def train_one_epoch(args, model, optimizer, train_loader, epoch, criterion,
             masks, low_res_masks, iou_predictions = prompt_and_decoder(
                 args, batched_input, model, image_embeddings, decoder_iter=True)
 
-            loss = criterion(masks, labels, iou_predictions) #pseudo_weights
+            loss = criterion(masks, labels, iou_predictions, pseudo_weights)
             loss.backward(retain_graph=True)
 
             optimizer.step()
@@ -211,14 +228,14 @@ def train_one_epoch(args, model, optimizer, train_loader, epoch, criterion,
             print(
                 f"epoch:{epoch + 1}, iteration:{batch + 1}, loss:{loss.item()}")
             save_path = os.path.join(f"{args.work_dir}/models", args.run_name,
-                                     f"epoch{epoch + 1}_batch{batch + 1}.pth")
+                                     f"epoch{epoch + 1}_batch{batch + 1}_sam.pth")
             state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict()}
             torch.save(state, save_path)
 
         global_train_losses.append(loss.item())
 
         pbar.update()
-        pbar.set_postfix(train_loss=loss.item(), epoch=epoch)
+        pbar.set_postfix(train_loss=loss.item(), pseudo_rate=0.1, epoch=epoch)
 
         if global_step % args.eval_interval == 0:
             average_test_loss, test_metrics_overall, test_metrics_datasets = \
@@ -235,44 +252,79 @@ def train_one_epoch(args, model, optimizer, train_loader, epoch, criterion,
             global_metrics_dict["Loss/train"] = average_train_loss
             global_metrics_dict["Loss/test"] = average_test_loss
 
-            wandb.log(global_metrics_dict, step=global_step, commit=True)
+            # if pseudo_schedular.is_active():
+            #     pseudo_schedular.step(update_epoch=False)
+            #     pseudo_schedular.update_metrics(global_metrics_dict)
+            #     train_loader.batch_sampler.set_sample_rate(pseudo_schedular.sample_rate)
 
-            global_metrics_dict = {}
-            global_train_losses = []
+            #     if pseudo_schedular.sample_rate > 0.0:
+            #         sample_total = int(args.eval_interval * pseudo_schedular.sample_rate)
+            #         pseudo_batch_indices, pseudo_batches_info = \
+            #             generate_pseudo_batches(
+            #                 args, model, pseudo_iter, gt_total, pseudo_total,
+            #                 pseudo_root, sample_total
+            #             )
+            #         16 * 200
 
-            # save checkpoints
-            chkpts = [
-                (p, float(re.search(r"test-loss(\d+\.\d+|nan)", os.path.basename(p)).group(1)))
-                for p in glob.glob(os.path.join(run_dir, "*.pth"))
-            ]
-            chkpts = sorted(chkpts, key=lambda x: x[-1])
-            if not chkpts or average_test_loss < chkpts[-1][-1]:
-                save_path = os.path.join(
-                    run_dir,
-                    f"epoch{epoch + 1:04d}_step{global_step}_loss{average_test_loss:.4f}.pth"
-                )
-                state = {
-                    'model': model.float().state_dict(),
-                    'optimizer': optimizer,
-                    'train-loss': average_train_loss,
-                    'test-loss': average_test_loss,
-                    'epoch': epoch + 1,
-                    'step': global_step
-                }
-                torch.save(state, save_path)
-                print("\nsave new checkpoint: ", save_path)
+            #         for key, val in pseudo_batches_info.items():
+            #             global_metrics_dict[f"Pseudo/{key}"] = val
 
-                chkpts.append((save_path, average_test_loss))
-                chkpts = sorted(chkpts, key=lambda x: x[-1])
-                for chkpt, _ in chkpts[max_num_chkpt:]:
-                    print("remove checkpoint: ", chkpt)
-                    os.remove(chkpt)
+            #         train_loader.batch_sampler.set_pseudo_indices_to_use(
+            #             pseudo_batch_indices)
+            #         train_loader.batch_sampler.set_sample_rate(
+            #             pseudo_schedular.sample_rate)
+
+            #     last_val = pseudo_schedular.metric_data["last"].get("value") or 0.0
+            #     current_val = pseudo_schedular.metric_data["current"].get("value") or 0.0
+            #     # print(f"\nupdate: bar total = {pbar.total}, focused_metric_change = {current_val - last_val}, pseudo sample_rate = {train_loader.batch_sampler.sample_rate}")
+
+            #     global_metrics_dict["Pseudo/sample_rate"] = pseudo_schedular.sample_rate
+            #     if not global_pseudo_counts:
+            #         global_metrics_dict["Pseudo/real_proportion"] = 0.0
+            #     else:
+            #         global_metrics_dict["Pseudo/real_proportion"] = \
+            #             sum(global_pseudo_counts) / len(global_pseudo_counts)
+
+            # wandb.log(global_metrics_dict, step=global_step, commit=True)
+
+            # global_metrics_dict = {}
+            # global_train_losses = []
+            # global_pseudo_counts = []
+
+            # # save checkpoints
+            # chkpts = [
+            #     (p, float(re.search(r"test-loss(\d+\.\d+)", os.path.basename(p)).group(1)))
+            #     for p in glob.glob(os.path.join(run_dir, "*.pth"))
+            # ]
+            # chkpts = sorted(chkpts, key=lambda x: x[-1])
+            # if not chkpts or average_test_loss < chkpts[-1][-1]:
+            #     save_path = os.path.join(
+            #         run_dir,
+            #         f"epoch{epoch + 1:04d}_step{global_step}_test-loss{average_test_loss:.4f}_sam.pth"
+            #     )
+            #     state = {
+            #         'model': model.float().state_dict(),
+            #         'optimizer': optimizer,
+            #         'train-loss': average_train_loss,
+            #         'test-loss': average_test_loss,
+            #         'epoch': epoch + 1,
+            #         'step': global_step
+            #     }
+            #     torch.save(state, save_path)
+            #     print("\nsave new checkpoint: ", save_path)
+
+            #     chkpts.append((save_path, average_test_loss))
+            #     chkpts = sorted(chkpts, key=lambda x: x[-1])
+            #     for chkpt, _ in chkpts[max_num_chkpt:]:
+            #         print("remove checkpoint: ", chkpt)
+            #         os.remove(chkpt)
 
 
 def main(args):
 
     global global_metrics_dict
     global global_step
+    global global_pseudo_counts
 
     model = sam_model_registry[args.model_type](args).to(args.device)
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
@@ -283,10 +335,10 @@ def main(args):
     run_dir = os.path.join(args.work_dir, "models", args.run_name)
     os.makedirs(run_dir, exist_ok=True)
 
-    if args.lr_scheduler:
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(
-            optimizer, milestones=[5, 10], gamma=0.5)
-        print('*******Use MultiStepLR')
+    # if args.lr_scheduler:
+    #     scheduler = torch.optim.lr_scheduler.MultiStepLR(
+    #         optimizer, milestones=[5, 10], gamma=0.5)
+    #     print('*******Use MultiStepLR')
 
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
                                                      milestones=[5, 10],
@@ -320,7 +372,7 @@ def main(args):
               "multimask", "encoder_adapter"]
     config = {p: getattr(args, p) for p in params}
     config["resume_checkpoint"] = resume_chkpt
-    wandb.init(project="SAM_3decoder", name=args.run_name, config=config)
+    wandb.init(project="SAM_Nuclei", name=args.run_name, config=config)
 
     # Random seed Setting
     if args.seed is not None:
@@ -373,8 +425,69 @@ def main(args):
 
     print("\ngt dataset length: ", len(train_set_gt))
 
-    train_loader = DataLoader(train_set_gt,  batch_size=args.batch_size,
+    pseudo_schedular = None
+    gt_total = len(train_set_gt)
+    pseudo_total = 0
+    pseudo_iter = None
+    pseudo_root = None
+    if args.activate_unsupervised:
+        pseudo_root = os.path.join(run_dir, "pseudo")
+        pseudo_data_dir = os.path.join(pseudo_root, "data")
+        os.makedirs(pseudo_data_dir, exist_ok=True)
+
+        pseudo_schedular = PseudoSchedular(
+            schedular_dir=run_dir,
+            focused_metric=args.unsupervised_focused_metric,
+            initial_sample_rate=args.unsupervised_initial_sample_rate,
+            sample_rate_delta=args.unsupervised_sample_rate_delta,
+            metric_delta_threshold=args.unsupervised_metric_delta_threshold,
+            current_epoch=0,
+            step=args.unsupervised_step if args.unsupervised_step else 1,
+            start_epoch=args.unsupervised_start_epoch,
+            pseudo_weight=args.unsupervised_weight,
+            pseudo_weight_gr=args.unsupervised_weight_gr
+        )
+
+        pseudo_split_path, pseudo_info = create_pseudo_datafolder(
+            args.unsupervised_dir, pseudo_root, args.image_size
+        )
+        pseudo_total = pseudo_info["quantity"]["train"]
+
+        pseudo_indices = list(range(gt_total, gt_total + pseudo_total))
+        pseudo_iter = PseudoIndicesIter(pseudo_indices)
+
+        train_set_pseudo = TrainingDataset(
+            split_paths=pseudo_split_path,
+            point_num=1,
+            edge_point_num=args.edge_point_num,
+            mask_num=args.mask_num,
+            requires_name=False,
+            is_pseudo=True
+        )
+        batch_sampler = CombineBatchSampler(
+            gt_dataset_len=gt_total,
+            pseudo_dataset_len=pseudo_total,
+            batch_size=args.batch_size,
+            sample_rate=pseudo_schedular.sample_rate,
+            drop_last=False
+        )
+        if pseudo_schedular.sample_rate > 0.0:
+            sample_total = int(args.eval_interval * pseudo_schedular.sample_rate)
+            pseudo_batch_indices, pseudo_batches_info = \
+                generate_pseudo_batches(
+                    args, model, pseudo_iter, gt_total, pseudo_total,
+                    pseudo_root, sample_total
+                )
+            for key, val in pseudo_batches_info.items():
+                global_metrics_dict[f"Pseudo/{key}"] = val
+            batch_sampler.set_pseudo_indices_to_use(pseudo_batch_indices)
+
+        train_loader = DataLoader(train_set_gt + train_set_pseudo,
+                                  batch_sampler=batch_sampler,
                                   num_workers=args.num_workers)
+
+    else:
+        train_loader = DataLoader(train_set_gt, num_workers=args.num_workers)
 
     test_loader = DataLoader(dataset=test_set, batch_size=args.batch_size,
                              shuffle=False, num_workers=args.num_workers)
@@ -397,9 +510,11 @@ def main(args):
                 global_metrics_dict[f"{dataset_name}/{metric}"] = \
                     test_metrics_datasets[dataset_name].get(metric, None)
 
-    global_metrics_dict["Loss/train"] = 1.0
-    global_metrics_dict["Loss/test"] = 1.0
+    global_metrics_dict["Loss/train"] = 0.0
+    global_metrics_dict["Loss/test"] = 0.0
 
+    # if pseudo_schedular.is_active():
+    #     pseudo_schedular.update_metrics(global_metrics_dict)
 
     wandb.log(global_metrics_dict, step=global_step, commit=True)
     global_metrics_dict = {}
@@ -410,11 +525,15 @@ def main(args):
 
         train_one_epoch(
             args, model, optimizer, train_loader, epoch, criterion,
-            test_loader, run_dir
+            pseudo_schedular, test_loader, pseudo_iter, gt_total, pseudo_total,
+            pseudo_root, run_dir
         )
 
         if args.lr_scheduler is not None:
             scheduler.step()
+
+        if pseudo_schedular is not None:
+            pseudo_schedular.step(update_epoch=True)
 
 
 if __name__ == '__main__':
@@ -423,5 +542,26 @@ if __name__ == '__main__':
     args = parse_train_args()
 
     args.encoder_adapter = True
+    # # args.split_paths = ["/Users/zhaojq/Datasets/SAM_nuclei_preprocessed/ALL2/split.json"]
+    # args.checkpoint = "/Users/zhaojq/PycharmProjects/NucleiSAM/pretrain_model/sam_vit_b_01ec64.pth"
+
+    # args.data_root = "/Users/zhaojq/Datasets/ALL_Multi"
+    # args.test_size = 0.05
+    # args.test_sample_rate = 0.01
+    # args.checkpoint = "epoch0077_test-loss0.1181_sam.pth"
+    # args.activate_unsupervised = True
+    # args.unsupervised_dir = "/Users/zhaojq/Datasets/ALL_Multi/CoNIC/data"
+    # args.eval_interval = 10
+    # args.unsupervised_initial_sample_rate = 0.01
+    # # args.unsupervised_weight_gr = 0.1
+    # args.batch_size = 4
+    # args.num_workers = 1
+    # args.points_per_batch = 32
+    # args.unsupervised_start_epoch = 1
+    # args.unsupervised_sample_rate_delta = 0.01
+    # args.unsupervised_metric_delta_threshold = 0.01
+    # args.stability_score_thresh = 0.80
+    # args.pred_iou_thresh = 0.75
+    # args.unsupervised_focused_metric = "Overall/dice"
 
     main(args)
