@@ -279,6 +279,8 @@ class TrainingDataset(Dataset):
 
             image_input["image"] = image_tensor.unsqueeze(0)
             image_input["label"] = mask.unsqueeze(1)
+            # image_input["edge"] = mask.unsqueeze(1)
+            # image_input["cluster_edge"] = mask.unsqueeze(1)
             image_input["boxes"] = boxes
             image_input["point_coords"] = point_coords
             image_input["point_labels"] = point_labels

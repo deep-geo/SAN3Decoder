@@ -7,7 +7,6 @@ import glob
 import numpy as np
 import torch
 import wandb
-import cv2
 
 #from segment_anything.build_sam import sam_model_registry
 from check_sam_registry import sam_model_registry
@@ -79,6 +78,7 @@ def eval_model(args, model, test_loader, output_dataset_metrics: bool = False):
                 batched_input["point_labels"]]
 
             for p in range(args.iter_point):
+                #masks, low_res_masks, iou_predictions = prompt_and_decoder(args, batched_input, model, image_embeddings)
                 seg_masks, low_res_seg_masks, seg_iou_predictions, norm_edge_masks, low_res_norm_edge_masks, norm_edge_iou_predictions, cluster_edge_masks, low_res_cluster_edge_masks, cluster_edge_iou_predictions = prompt_and_decoder(args, batched_input, model, image_embeddings) #Added by Ray 0716
                 if p != args.iter_point - 1:
                     batched_input = generate_point(
@@ -94,6 +94,7 @@ def eval_model(args, model, test_loader, output_dataset_metrics: bool = False):
                            torch.concat(point_labels, dim=1))
 
         #masks, pad = postprocess_masks(low_res_masks, args.image_size, original_size)
+
         if args.save_pred:
             save_masks(seg_masks, save_path, img_name, args.image_size,
                        original_size, pad, batched_input.get("boxes", None),
@@ -163,8 +164,35 @@ def train_one_epoch(args, model, optimizer, train_loader, epoch, criterion, tota
 
         image_embeddings = torch.cat(image_embeddings_repeat, dim=0)
 
-        #masks, low_res_masks, iou_predictions = prompt_and_decoder(args, batched_input, model, image_embeddings, decoder_iter=False
+        #masks, low_res_masks, iou_predictions = prompt_and_decoder(
+        #    args, batched_input, model, image_embeddings, decoder_iter=False
         seg_masks, low_res_seg_masks, seg_iou_predictions, norm_edge_masks, low_res_norm_edge_masks, norm_edge_iou_predictions, cluster_edge_masks, low_res_cluster_edge_masks, cluster_edge_iou_predictions = prompt_and_decoder(args, batched_input, model, image_embeddings, decoder_iter=False)
+
+        # Ensure the labels are repeated to match the masks
+        #labels = labels.repeat_interleave(args.mask_num, dim=0)
+
+        # print(f"seg_masks shape: {seg_masks.shape}")
+        # print(f"norm_edge_masks shape: {norm_edge_masks.shape}")
+        # print(f"labels shape: {labels.shape}")
+        
+        # print(f"cluster_edge_masks shape: {cluster_edge_masks.shape}")
+        # print(f"seg_iou_predictions shape: {seg_iou_predictions.shape}")
+        # print(f"norm_edge_iou_predictions shape: {norm_edge_iou_predictions.shape}")
+        # print(f"cluster_edge_iou_predictions shape: {cluster_edge_iou_predictions.shape}")
+        # print(f"labels shape: {labels.shape}")
+
+        # Ensure shapes match for loss calculation
+        assert seg_masks.shape == labels.shape, f"seg_masks shape {seg_masks.shape} does not match labels shape {labels.shape}"
+        assert norm_edge_masks.shape == labels.shape, f"norm_edge_masks shape {norm_edge_masks.shape} does not match labels shape {labels.shape}"
+        assert cluster_edge_masks.shape == labels.shape, f"cluster_edge_masks shape {cluster_edge_masks.shape} does not match labels shape {labels.shape}"
+
+       
+
+        # Print gradient norms
+        # for name, param in model.named_parameters():
+        #     if param.grad is not None:
+        #         print(f"{name} grad norm: {param.grad.norm()}")
+
 
         #loss = criterion(masks, labels, iou_predictions)
         loss = total_loss_fn(seg_masks, labels, seg_iou_predictions, 
@@ -197,21 +225,29 @@ def train_one_epoch(args, model, optimizer, train_loader, epoch, criterion, tota
 
             seg_masks, low_res_seg_masks, seg_iou_predictions, norm_edge_masks, low_res_norm_edge_masks, norm_edge_iou_predictions, cluster_edge_masks, low_res_cluster_edge_masks, cluster_edge_iou_predictions = prompt_and_decoder(args, batched_input, model, image_embeddings, decoder_iter=True)
 
-            optimizer.zero_grad()
-            seg_mask_arr = seg_masks[0][0].detach().cpu().numpy().astype(np.uint16)
-            label_arr = (labels[0][0].detach().cpu().numpy() * 255).astype(np.uint8)
-            print(f"=============>>>>>> seg_mask_arr: {np.unique(seg_mask_arr)}, label_arr: {np.unique(label_arr)}")
-            seg_mask_arr = seg_mask_arr.astype(np.uint8)
 
-            # cv2.imwrite("seg_mask_arr.png", seg_mask_arr)
-            # cv2.imwrite("label_arr.png", label_arr)
-            # exit()
-            
+            #loss = criterion(masks, labels, iou_predictions) 
+            #loss = Total_Loss(seg_masks, norm_edge_masks, cluster_edge_masks, labels, labels, labels)
+            # loss = total_loss_fn(seg_masks, labels, seg_iou_predictions, 
+            #                  norm_edge_masks, labels, norm_edge_iou_predictions, 
+            #                  cluster_edge_masks, labels, cluster_edge_iou_predictions)
+
+
+
+            # Print loss components
+            # seg_loss = total_loss_fn.segmentation_loss(seg_masks, labels, seg_iou_predictions)
+            # edge_loss = total_loss_fn.edge_loss(norm_edge_masks, labels, norm_edge_iou_predictions)
+            # cluster_edge_loss = total_loss_fn.cluster_edge_loss(cluster_edge_masks, labels, cluster_edge_iou_predictions)
+            #print(f"Step: {global_step}, Segmentation Loss: {seg_loss.item()}, Edge Loss: {edge_loss.item()}, Cluster Edge Loss: {cluster_edge_loss.item()}, Total Loss: {loss.item()}")
+
+            #loss.backward(retain_graph=True)
+
+            optimizer.zero_grad()
             loss = total_loss_fn(seg_masks, labels, seg_iou_predictions, 
                              norm_edge_masks, labels, norm_edge_iou_predictions, 
                              cluster_edge_masks, labels, cluster_edge_iou_predictions)
 
-            loss.backward(retain_graph=False)
+            loss.backward()
             optimizer.step()
 
             if p != args.iter_point - 1:
@@ -294,7 +330,9 @@ def main(args):
     criterion = FocalDiceloss_IoULoss()
     total_loss_fn = Total_Loss(weight=20.0, iou_scale=1.0)
 
-    #print("Model's segmentation_decoder:", model.segmentation_decoder)
+    print("Model's segmentation_decoder:", model.segmentation_decoder)
+    # print("Model's normal_edge_decoder:", model.normal_edge_decoder)
+    # print("Model's cluster_edge_decoder:", model.cluster_edge_decoder)
     
     args.run_name = f"{args.run_name}_{datetime.datetime.now().strftime('%m-%d_%H-%M')}"
 

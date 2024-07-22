@@ -109,8 +109,7 @@ class Total_Loss(nn.Module):
 
     def forward(self, seg_pred, seg_mask, seg_iou_pred,
                 edge_pred, edge_mask, edge_iou_pred,
-                cluster_edge_pred, cluster_edge_mask, cluster_edge_iou_pred,
-                weights=None):
+                cluster_edge_pred, cluster_edge_mask, cluster_edge_iou_pred):
         """
         Combines the losses from segmentation, normal edge, and cluster edge decoders.
         """
