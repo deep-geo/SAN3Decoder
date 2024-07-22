@@ -129,6 +129,8 @@ def train_one_epoch(args, model, optimizer, train_loader, epoch, criterion, tota
 
     while True:
 
+        model.train()
+
         try:
             batched_input = next(dataloader_iter)
         except StopIteration:
@@ -270,6 +272,8 @@ def train_one_epoch(args, model, optimizer, train_loader, epoch, criterion, tota
                 for chkpt, _ in chkpts[max_num_chkpt:]:
                     print("remove checkpoint: ", chkpt)
                     os.remove(chkpt)
+            model.train()
+            print("train status after eval: ", model.training)
 
 
 def main(args):
