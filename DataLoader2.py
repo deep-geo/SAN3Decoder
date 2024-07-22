@@ -215,7 +215,7 @@ class TrainingDataset(Dataset):
             try:
                 image_path = self.image_paths[index]
                 image = cv2.imread(image_path)
-                cv2.imshow("image", image)
+                # cv2.imshow("image", image)
                 image = (image - self.pixel_mean) / self.pixel_std
             except:
                 # print("read image error: ", self.image_paths[index])
@@ -275,7 +275,7 @@ class TrainingDataset(Dataset):
                 mask_uint8 = augments['mask'].cpu().numpy().astype(np.uint8)
 
                 mask_uint8[mask_uint8 != 0] = 255
-                cv2.imshow("mask_uint8", mask_uint8)
+                # cv2.imshow("mask_uint8", mask_uint8)
                 # get edge mask
                 normal_edge_mask = cv2.Canny(mask_uint8, 100, 200)
                 normal_edge_mask[normal_edge_mask != 0] = 1

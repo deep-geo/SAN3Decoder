@@ -104,61 +104,8 @@ def parse_train_args():
     parser.add_argument(
         "--save_pred", action='store_true', help="save result"
     )
-    # unsupervised
-    parser.add_argument(
-        "--activate_unsupervised", action="store_true",
-        help="activate unsupervised"
-    )
-    parser.add_argument(
-        "--unsupervised_only", action="store_true", help="activate unsupervised"
-    )
-    parser.add_argument(
-        "--unsupervised_dir", type=str, help="dir containing unsupervised data"
-    )
-    parser.add_argument(
-        "--unsupervised_start_epoch", type=int, default=0,
-        help="epoch to start generating unsupervised dataset"
-    )
-    parser.add_argument(
-        "--unsupervised_initial_sample_rate",
-        type=float, default=0.1
-    )
-    parser.add_argument(
-        "--unsupervised_sample_rate_delta",
-        type=float, default=0.1
-    )
-    parser.add_argument(
-        "--unsupervised_focused_metric",
-        type=str, default=None, help="focused metric to adjust sample rate"
-    )
-    parser.add_argument(
-        "--unsupervised_metric_delta_threshold",
-        type=float, default=0.01
-    )
-    parser.add_argument(
-        "--unsupervised_step", type=int, default=1,
-        help="step to update unsupervised dataset"
-    )
-    parser.add_argument(
-        "--unsupervised_weight", type=float, default=1.0
-    )
-    parser.add_argument(
-        "--unsupervised_weight_gr", type=float, default=0
-    )
     parser.add_argument(
         "--pred_iou_thresh", type=float, default=0.88,
-        help="Mask filtering threshold in [0,1]"
-    )
-    parser.add_argument(
-        "--stability_score_thresh", type=float, default=0.95,
-        help="Mask filtering threshold in [0,1]"
-    )
-    parser.add_argument(
-        "--points_per_side", type=int, default=32,
-        help="Mask filtering threshold in [0,1]"
-    )
-    parser.add_argument(
-        "--points_per_batch", type=int, default=256,
         help="Mask filtering threshold in [0,1]"
     )
 

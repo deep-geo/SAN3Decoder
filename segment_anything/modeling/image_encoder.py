@@ -161,7 +161,7 @@ class ImageEncoderViT(nn.Module):
             if x.size(1) != self.pos_embed.size(1) or x.size(2) != self.pos_embed.size(2):
             # Resize pos_embed to match x's height and width
                 self.pos_embed = nn.Parameter(torch.zeros(1, x.size(1), x.size(2), self.channels).to(x.device))
-                print(f"reshaped pos_embed shape: {self.pos_embed.shape}")
+                # print(f"reshaped pos_embed shape: {self.pos_embed.shape}")
             x = x + self.pos_embed
 
         for blk in self.blocks:

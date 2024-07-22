@@ -198,16 +198,7 @@ def train_one_epoch(args, model, optimizer, train_loader, epoch, criterion, tota
             seg_masks, low_res_seg_masks, seg_iou_predictions, norm_edge_masks, low_res_norm_edge_masks, norm_edge_iou_predictions, cluster_edge_masks, low_res_cluster_edge_masks, cluster_edge_iou_predictions = prompt_and_decoder(args, batched_input, model, image_embeddings, decoder_iter=True)
 
             optimizer.zero_grad()
-            seg_mask_arr = seg_masks[0][0].detach().cpu().numpy().astype(np.uint16)
-            label_arr = (labels[0][0].detach().cpu().numpy() * 255).astype(np.uint8)
-            print(f"=============>>>>>> seg_mask_arr: {np.unique(seg_mask_arr)}, label_arr: {np.unique(label_arr)}")
-            seg_mask_arr = seg_mask_arr.astype(np.uint8)
-
-            # cv2.imwrite("seg_mask_arr.png", seg_mask_arr)
-            # cv2.imwrite("label_arr.png", label_arr)
-            # exit()
-            
-            loss = total_loss_fn(seg_masks, labels, seg_iou_predictions, 
+            loss = total_loss_fn(seg_masks, labels, seg_iou_predictions,
                              norm_edge_masks, labels, norm_edge_iou_predictions, 
                              cluster_edge_masks, labels, cluster_edge_iou_predictions)
 
@@ -379,20 +370,19 @@ def main(args):
         )
     )
 
-    print("\nEvaluate model using initial checkpoint...")
-    average_test_loss, test_metrics_overall, test_metrics_datasets = \
-        eval_model(args, model, test_loader, output_dataset_metrics=True)
-
-    for metric in args.metrics:
-        global_metrics_dict[f"Overall/{metric}"] = test_metrics_overall.get(metric, None)
-        if test_metrics_datasets:
-            for dataset_name in test_metrics_datasets.keys():
-                global_metrics_dict[f"{dataset_name}/{metric}"] = \
-                    test_metrics_datasets[dataset_name].get(metric, None)
-
-    global_metrics_dict["Loss/train"] = average_test_loss
-    global_metrics_dict["Loss/test"] = average_test_loss
-
+    # print("\nEvaluate model using initial checkpoint...")
+    # average_test_loss, test_metrics_overall, test_metrics_datasets = \
+    #     eval_model(args, model, test_loader, output_dataset_metrics=True)
+    #
+    # for metric in args.metrics:
+    #     global_metrics_dict[f"Overall/{metric}"] = test_metrics_overall.get(metric, None)
+    #     if test_metrics_datasets:
+    #         for dataset_name in test_metrics_datasets.keys():
+    #             global_metrics_dict[f"{dataset_name}/{metric}"] = \
+    #                 test_metrics_datasets[dataset_name].get(metric, None)
+    #
+    # global_metrics_dict["Loss/train"] = average_test_loss
+    # global_metrics_dict["Loss/test"] = average_test_loss
 
     wandb.log(global_metrics_dict, step=global_step, commit=True)
     global_metrics_dict = {}
@@ -434,4 +424,18 @@ if __name__ == '__main__':
     mp.set_start_method('spawn')
     args = parse_train_args()
     args.encoder_adapter = True
+    args.multimask = False
+
+    # args.batch_size = 2
+    # args.test_sample_rate = 0.01
+    # args.test_size = 0.1
+    # args.num_workers = 2
+    # args.image_size = 256
+    # args.data_root = "/Users/zhaojq/Datasets/ALL_Multi"
+    # args.checkpoint = "/Users/zhaojq/PycharmProjects/SAN3Decoder/sam_vit_b_01ec64.pth"
+    # args.resume = "/Users/zhaojq/PycharmProjects/SAN3Decoder/epoch0079_test-loss0.1429_sam.pth"
+    # args.model_type = "three_decoder"
+    # args.edge_point_num = 3
+    # args.boxes_prompt = True
+
     main(args)

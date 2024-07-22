@@ -78,11 +78,10 @@ class MaskDecoder(nn.Module):
         )
 
         if multimask_output:
-            #mask_slice = slice(1, None)
-            mask_slice = slice(1, 2)
+            mask_slice = slice(1, None)
+            # mask_slice = slice(1, 2)
         else:
             mask_slice = slice(0, 1)
-            print("2")
         #print(f"mask_slice shape: {mask_slice.shape}")
         # print(f"mask_slice : {mask_slice}")
         # print(f"masks.shape:{masks.shape}")

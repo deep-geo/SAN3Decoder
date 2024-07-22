@@ -516,7 +516,7 @@ def prompt_and_decoder(args, batched_input, model, image_embeddings,
         seg_low_res = []
         for i, idx in enumerate(max_indexs):
             seg_low_res.append(low_res_seg_masks[i:i + 1, idx])
-        seg_masks = torch.stack(seg_low_res, 0)
+        low_seg_masks = torch.stack(seg_low_res, 0)
 
 
     #masks = F.interpolate(low_res_masks, (args.image_size, args.image_size), mode="bilinear", align_corners=False)
@@ -605,8 +605,6 @@ def generate_cluster_edge_mask(mask, current_value, iterations):
     mask = mask.copy()
     kernel = np.ones((3, 3), np.uint8)
     dilated_label = cv2.dilate(mask, kernel, iterations=iterations)
-
-    cv2.im
 
     # Identify where the dilated label differs from the original, indicating potential cluster edges
     potential_cluster_edges = dilated_label != mask

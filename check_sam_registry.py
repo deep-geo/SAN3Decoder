@@ -61,7 +61,7 @@ def create_three_decoder_sam(args):
     segmentation_decoder = MaskDecoder(
         transformer_dim=256,
         transformer=transformer_module,  # Define or import the transformer used here
-        num_multimask_outputs=3,
+        num_multimask_outputs=1,
         activation=nn.GELU,
         iou_head_depth=3,
         iou_head_hidden_dim=256,
@@ -70,7 +70,7 @@ def create_three_decoder_sam(args):
     normal_edge_decoder = MaskDecoder(
         transformer_dim=256,
         transformer=transformer_module,  # Define or import the transformer used here
-        num_multimask_outputs=3,
+        num_multimask_outputs=1,
         activation=nn.GELU,
         iou_head_depth=3,
         iou_head_hidden_dim=256,
@@ -79,7 +79,7 @@ def create_three_decoder_sam(args):
     cluster_edge_decoder = MaskDecoder(
         transformer_dim=256,
         transformer=transformer_module,  # Define or import the transformer used here
-        num_multimask_outputs=3,
+        num_multimask_outputs=1,
         activation=nn.GELU,
         iou_head_depth=3,
         iou_head_hidden_dim=256,
