@@ -15,7 +15,7 @@ python train_step2.py \
 --metrics 'iou' 'dice' 'precision' 'f1_score' 'recall' 'specificity' 'accuracy' 'aji' 'dq' 'sq' 'pq' \
 --checkpoint "/root/autodl-tmp/sam_vit_b_01ec64.pth" \
 --device "cuda" \
---lr 0.0001 \
+--lr 0.00001 \
 --resume "/root/autodl-tmp/workdir/models/sup_CEP_baseline_No_MoNuSeg2020_07-01_19-33/epoch0079_step40500_test-loss0.1233_sam.pth" \
 --model_type "three_decoder" \
 --boxes_prompt \

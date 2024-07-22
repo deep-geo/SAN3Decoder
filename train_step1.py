@@ -43,8 +43,6 @@ def eval_model(args, model, test_loader, output_dataset_metrics: bool = False):
     for i, batched_input in enumerate(tqdm(test_loader,
                                            desc=f"Testing(step={global_step})",
                                            mininterval=0.5, ascii=True)):
-        # if i > 5:
-        #     break
         batched_input = to_device(batched_input, args.device)
         dataset_names.append(batched_input["dataset_name"])
         ori_labels = batched_input["ori_label"]
@@ -136,8 +134,6 @@ def train_one_epoch(args, model, optimizer, train_loader, epoch, criterion,
             break
 
         global_step += 1
-        # if global_step == 31:
-        #     break
         batched_input = stack_dict_batched(batched_input)
         batched_input = to_device(batched_input, args.device)
 
@@ -283,10 +279,10 @@ def main(args):
     run_dir = os.path.join(args.work_dir, "models", args.run_name)
     os.makedirs(run_dir, exist_ok=True)
 
-    if args.lr_scheduler:
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(
-            optimizer, milestones=[5, 10], gamma=0.5)
-        print('*******Use MultiStepLR')
+    # if args.lr_scheduler:
+    #     scheduler = torch.optim.lr_scheduler.MultiStepLR(
+    #         optimizer, milestones=[5, 10], gamma=0.5)
+    #     print('*******Use MultiStepLR')
 
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
                                                      milestones=[5, 10],
