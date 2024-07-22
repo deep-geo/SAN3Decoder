@@ -590,6 +590,45 @@ class MaskPredictor:
         return masks
 
 
+def generate_cluster_edge_mask(mask, current_value, iterations):
+    """
+    Generate cluster edge masks from grayscale instance segmentation masks.
+    Identifies edges between touching cells.
+
+    Args:
+    - label (numpy.ndarray): Grayscale instance segmentation mask.
+
+    Returns:
+    - numpy.ndarray: Binary cluster edge mask.
+    """
+    # Dilate the label to make adjacent instances overlap
+    mask = mask.copy()
+    kernel = np.ones((3, 3), np.uint8)
+    dilated_label = cv2.dilate(mask, kernel, iterations=iterations)
+
+    cv2.im
+
+    # Identify where the dilated label differs from the original, indicating potential cluster edges
+    potential_cluster_edges = dilated_label != mask
+
+    # Initialize cluster edge mask
+    cluster_edge_mask = np.zeros(mask.shape, dtype=np.uint8)
+
+    # Iterate through potential cluster edges and validate against original label
+    for y in range(mask.shape[0]):
+        for x in range(mask.shape[1]):
+            if potential_cluster_edges[y, x]:
+                # Get the original and dilated values
+                original_value = mask[y, x]
+                dilated_value = dilated_label[y, x]
+
+                # If the dilated value is different from the original, and neither is background
+                if original_value != dilated_value and original_value != 0 and dilated_value != 0 and dilated_value == current_value:
+                    # Mark as cluster edge
+                    cluster_edge_mask[y, x] = 1
+    return cluster_edge_mask
+
+
 if __name__ == "__main__":
     # test
     from segment_anything.build_sam import _build_sam

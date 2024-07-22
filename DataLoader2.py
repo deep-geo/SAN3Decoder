@@ -16,6 +16,7 @@ from utils import get_boxes_from_mask, init_point_sampling, \
     get_edge_points_from_mask, get_transform
 from torch.utils.data import Dataset, DataLoader, Sampler
 from preprocess.split_dataset import split_dataset
+from utils import generate_cluster_edge_mask
 
 
 class TestingDataset(Dataset):
@@ -214,6 +215,7 @@ class TrainingDataset(Dataset):
             try:
                 image_path = self.image_paths[index]
                 image = cv2.imread(image_path)
+                cv2.imshow("image", image)
                 image = (image - self.pixel_mean) / self.pixel_std
             except:
                 # print("read image error: ", self.image_paths[index])
@@ -224,6 +226,8 @@ class TrainingDataset(Dataset):
             transforms = A.Compose([ToTensorV2(p=1.0)], p=1.)
 
             masks_list = []
+            normal_edges_list = []
+            cluster_edges_list = []
             boxes_list = []
             point_coords_list, point_labels_list = [], []
             edge_point_coords_list = []
@@ -268,7 +272,22 @@ class TrainingDataset(Dataset):
                         mask_val, original_mask, self.edge_point_num)
                     edge_point_coords_list.append(edge_point_coords)
 
+                mask_uint8 = augments['mask'].cpu().numpy().astype(np.uint8)
+
+                mask_uint8[mask_uint8 != 0] = 255
+                cv2.imshow("mask_uint8", mask_uint8)
+                # get edge mask
+                normal_edge_mask = cv2.Canny(mask_uint8, 100, 200)
+                normal_edge_mask[normal_edge_mask != 0] = 1
+                normal_edges_list.append(torch.tensor(normal_edge_mask, dtype=torch.int64))
+                # get cluster edge mask
+                cluster_edge_mask = generate_cluster_edge_mask(original_mask, mask_val, iterations=2)
+                cluster_edges_list.append(torch.tensor(cluster_edge_mask, dtype=torch.int64))
+
             mask = torch.stack(masks_list, dim=0)
+            normal_edges = torch.stack(normal_edges_list, dim=0)
+            cluster_edges = torch.stack(cluster_edges_list, dim=0)
+
             boxes = torch.stack(boxes_list, dim=0)
             point_coords = torch.stack(point_coords_list, dim=0)
             point_labels = torch.stack(point_labels_list, dim=0)
@@ -279,6 +298,8 @@ class TrainingDataset(Dataset):
 
             image_input["image"] = image_tensor.unsqueeze(0)
             image_input["label"] = mask.unsqueeze(1)
+            image_input["normal_edges"] = normal_edges.unsqueeze(1)
+            image_input["cluster_edges"] = cluster_edges.unsqueeze(1)
             image_input["boxes"] = boxes
             image_input["point_coords"] = point_coords
             image_input["point_labels"] = point_labels
@@ -390,5 +411,19 @@ class TrainingDatasetFolder(TrainingDataset, DatasetFolderMixin):
             point_num=point_num, mask_num=mask_num,
             edge_point_num=edge_point_num
         )
+
+
+if __name__ == "__main__":
+    dataset = TrainingDatasetFolder(
+        data_root="/Users/zhaojq/Datasets/ALL_Multi/CoNIC",
+        train_size=0.9
+    )
+    import random
+    idxs = list(range(len(dataset)))
+    random.shuffle(idxs)
+    for i in idxs:
+        result = dataset[i]
+        print(len(result))
+
 
 
