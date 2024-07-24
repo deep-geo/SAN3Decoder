@@ -29,7 +29,7 @@ def create_three_decoder_sam(args):
     mask_in_chans = 16  # This is an example value; adjust according to your model requirements
 
     
-    image_encoder = ImageEncoderViT()
+    image_encoder = ImageEncoderViT(adapter_train=True)
     prompt_encoder = PromptEncoder(
         embed_dim=embed_dim,
         image_embedding_size=image_embedding_size,
