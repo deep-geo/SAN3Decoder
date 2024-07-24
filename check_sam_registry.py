@@ -2,6 +2,8 @@ from segment_anything.modeling import ImageEncoderViT, PromptEncoder, MaskDecode
 from segment_anything.modeling.sam import Sam
 import torch.nn as nn
 from torch.nn import LayerNorm
+from functools import partial
+import torch
 
 
 class SimpleTransformer(nn.Module):
@@ -29,7 +31,21 @@ def create_three_decoder_sam(args):
     mask_in_chans = 16  # This is an example value; adjust according to your model requirements
 
     
-    image_encoder = ImageEncoderViT(adapter_train=True)
+    image_encoder = ImageEncoderViT(
+        depth=12,
+        embed_dim=768,
+        img_size=256,
+        mlp_ratio=4,
+        norm_layer=partial(torch.nn.LayerNorm, eps=1e-6),
+        num_heads=12,
+        patch_size=16,
+        qkv_bias=True,
+        use_rel_pos=True,
+        global_attn_indexes=(2, 5, 8, 11),
+        window_size=14,
+        out_chans=256,
+        adapter_train=True,
+    )
     prompt_encoder = PromptEncoder(
         embed_dim=embed_dim,
         image_embedding_size=image_embedding_size,
