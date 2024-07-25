@@ -63,7 +63,7 @@ class MaskDecoder(nn.Module):
         image_pe: torch.Tensor,          
         sparse_prompt_embeddings: torch.Tensor, 
         dense_prompt_embeddings: torch.Tensor,  
-        multimask_output: bool,
+        multimask_output: bool=False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         masks, iou_pred = self.predict_masks(
             image_embeddings=image_embeddings,
