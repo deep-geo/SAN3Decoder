@@ -2,10 +2,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from typing import List, Tuple, Type
-
-class LayerNorm2d(nn.LayerNorm):
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return super().forward(x.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+from .common import LayerNorm2d
 
 class MLP(nn.Module):
     def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int, sigmoid_output: bool = False) -> None:
@@ -58,9 +55,7 @@ class MaskDecoder(nn.Module):
             [MLP(transformer_dim, transformer_dim, transformer_dim // 8, 3) for _ in range(self.num_mask_tokens)]
         )
         self.iou_prediction_head = MLP(transformer_dim, iou_head_hidden_dim, self.num_mask_tokens, iou_head_depth)
-        self.dense_embed_conv = nn.Conv2d(768, 256, kernel_size=1)
-        self.token_proj = nn.Linear(transformer_dim, transformer_dim)  # Ensure tokens have the correct dimension
-        self.src_proj = nn.Linear(transformer_dim, transformer_dim)  # Ensure src has the correct dimension
+      
 
     def forward(
         self,
@@ -68,7 +63,7 @@ class MaskDecoder(nn.Module):
         image_pe: torch.Tensor,          
         sparse_prompt_embeddings: torch.Tensor, 
         dense_prompt_embeddings: torch.Tensor,  
-        multimask_output: bool,
+        multimask_output: bool=False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         masks, iou_pred = self.predict_masks(
             image_embeddings=image_embeddings,
@@ -79,13 +74,9 @@ class MaskDecoder(nn.Module):
 
         if multimask_output:
             mask_slice = slice(1, None)
-            # mask_slice = slice(1, 2)
         else:
             mask_slice = slice(0, 1)
-        #print(f"mask_slice shape: {mask_slice.shape}")
-        # print(f"mask_slice : {mask_slice}")
-        # print(f"masks.shape:{masks.shape}")
-        
+ 
         masks = masks[:, mask_slice, :, :]
         iou_pred = iou_pred[:, mask_slice]
 
@@ -103,29 +94,18 @@ class MaskDecoder(nn.Module):
         output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
         tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=1)
 
-        # Project tokens to the correct dimension 
-        tokens = self.token_proj(tokens) # by Ray
-
         dense_prompt_embeddings_resized = F.interpolate(dense_prompt_embeddings, size=(image_embeddings.shape[2], image_embeddings.shape[3]), mode="bilinear", align_corners=False)
-        if dense_prompt_embeddings_resized.shape[1] != image_embeddings.shape[1]:
-            dense_prompt_embeddings_resized = self.dense_embed_conv(dense_prompt_embeddings_resized)
-
+       
         src = image_embeddings + dense_prompt_embeddings_resized
 
         # Resize image_pe to match src's dimensions
         image_pe_resized = F.interpolate(image_pe, size=(src.shape[2], src.shape[3]), mode='bilinear', align_corners=False) #by ray
-        #pos_src = image_pe_resized.expand_as(src)
         pos_src = image_pe_resized.expand(batch_size, -1, -1, -1)
         #pos_src = image_pe.expand_as(src)
 
 
         # Flatten and project src to the correct dimension
         src = src.flatten(2).transpose(1, 2)  # [batch_size, seq_len, embed_dim]
-        src = self.src_proj(src)
-
-        # Ensure batch sizes match
-        if src.size(0) != tokens.size(0):
-            raise ValueError(f"Batch size of src ({src.size(0)}) and tokens ({tokens.size(0)}) must be equal")
 
         # Transpose to [seq_len, batch_size, embed_dim] for transformer
         src = src.transpose(0, 1)
@@ -140,13 +120,7 @@ class MaskDecoder(nn.Module):
         src = src.transpose(0, 1).reshape(batch_size, self.transformer_dim, *image_embeddings.shape[2:])
         upscaled_embedding = self.output_upscaling(src)
 
-        
-        # hs, src = self.transformer(src, pos_src, tokens)
-        # iou_token_out = hs[:, 0, :]
-        # mask_tokens_out = hs[:, 1 : (1 + self.num_mask_tokens), :]
 
-        # src = src.transpose(1, 2).view(src.size(0), self.transformer_dim, *image_embeddings.shape[2:])
-        # upscaled_embedding = self.output_upscaling(src)
         hyper_in_list: List[torch.Tensor] = []
         for i in range(self.num_mask_tokens):
             hyper_in_list.append(self.output_hypernetworks_mlps[i](mask_tokens_out[:, i, :]))
